@@ -1,6 +1,392 @@
 # BEP-thesis-
 
 <pre> ```python
+
+#CURRENT PRACTICE (CHAPTER 2) GRAPHS 
+
+-----------------------------------------------------
+#GRAPH 1 - Annual TFF performance + table 
+-----------------------------------------------------
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+#Loading the data
+df = pd.read_excel("DatasetTFF.xlsx")
+
+#Extract the year from the transport deadline date
+df["year"] = df["tff_transportDeadlineDateTime"].dt.year
+
+#Filter for specific years (2021 - 2024)
+df = df[df["year"].between(2021,2024)]
+
+#Count TFF labels based on the total shipments per year
+tff_counts = df.groupby(["year", "tff_label"])["totalShipments"].sum().unstack(fill_value = 0)
+
+#Calculate the annual TFF percentages
+tff_counts["TFF (%)"] = (tff_counts["ON_TIME"] / tff_counts.sum(axis = 1)) * 100
+
+#Show the result of the number of early, on time and late labels in the dataset with the TFF percentages calculated (table 2)
+print(tff_counts)
+
+#Show bar plot of annual TFF
+plt.figure(figsize = (8,5))
+bars = plt.bar(tff_counts.index, tff_counts["TFF (%)"], width = 0.6)
+plt.title("Annual TFF Performance (2021-2024)", fontsize = 16, fontweight = "bold")
+plt.xlabel("Year", fontsize = 13)
+plt.ylabel("TFF (%)", fontsize = 13)
+plt.xticks([2021, 2022, 2023, 2024], fontsize = 11)
+plt.yticks(fontsize = 11)
+plt.ylim(0,100)
+
+#Add TFF percentages at the top of the bars
+for bar in bars:
+    height = bar.get_height()
+    plt.text(bar.get_x() + bar.get_width() / 2, height + 1, f"{height:.1f}%", ha = "center", va = "bottom", fontsize = 11)
+
+plt.tight_layout()
+plt.show()
+
+-----------------------------------------------------
+#GRAPH 2 - Monthly TFF performance (2021-2024)
+-----------------------------------------------------
+#Loading the data
+df = pd.read_excel("DatasetTFF.xlsx")
+
+#Extract the year and month from the transport deadline date
+df["year"] = df["tff_transportDeadlineDateTime"].dt.year
+df["month"] = df["tff_transportDeadlineDateTime"].dt.month
+
+#Filter for specific years (2021 - 2024)
+df = df[df["year"].between(2021, 2024)]
+
+#Count TFF labels based on the total shipments per month and year
+monthly_tff_labels = df.groupby(["year", "month", "tff_label"])["totalShipments"].sum().unstack(fill_value=0)
+
+#Caculate the monthly TFF percentages
+monthly_tff_labels["TFF (%)"] = (monthly_tff_labels["ON_TIME"] / monthly_tff_labels.sum(axis = 1)) * 100
+
+#Datetime index for labeling
+monthly_tff_labels = monthly_tff_labels.reset_index()
+monthly_tff_labels["date"] = pd.to_datetime(dict(year = monthly_tff_labels["year"], month = monthly_tff_labels["month"], day = 1))
+
+#Sort by date
+monthly_tff_labels = monthly_tff_labels.sort_values("date")
+
+#Create one big bar plot
+
+plt.figure(figsize = (8,5))
+bars = plt.bar(monthly_tff_labels["date"], monthly_tff_labels["TFF (%)"], width = 20)
+
+#X-axis labels: only Jan with year
+labels = []
+for _, row in monthly_tff_labels.iterrows():
+    if row["month"] == 1:
+        labels.append(row["date"].strftime("%b-%Y"))
+    else:
+        labels.append(row["date"].strftime("%b"))
+
+plt.title("Monthly TFF Performance (2021-2024)", fontsize = 16, fontweight = "bold")
+plt.xlabel("Month", fontsize = 13)
+plt.ylabel("TFF (%)", fontsize = 13)
+plt.ylim(0, 110)
+plt.xticks(ticks = monthly_tff_labels["date"], labels = labels, rotation = 45, fontsize = 11)
+plt.yticks(fontsize = 11)
+plt.grid(axis = "y", linestyle = "--")
+
+plt.tight_layout()
+plt.show()
+
+-----------------------------------------------------
+#GRAPH 3 - Daily TFF performance (2021-2024)
+-----------------------------------------------------
+import matplotlib.dates as mdates
+
+#Loading the data
+df = pd.read_excel("DatasetTFF.xlsx")
+
+#Extract the year from the transport deadline date
+df["year"] = df["tff_transportDeadlineDateTime"].dt.year
+
+#Filter for specific years (2021 - 2024)
+df = df[df["year"].between(2021, 2024)]
+
+#Count TFF labels based on the total shipments per day
+daily_counts = df.groupby(["tff_transportDeadlineDateTime", "tff_label"])["totalShipments"].sum().unstack(fill_value = 0)
+
+#Caculate the daily TFF percentages
+daily_counts["TFF (%)"] = (daily_counts["ON_TIME"] / daily_counts.sum(axis=1)) * 100
+
+#Seperate the daily data per year in the plot
+daily_counts["year"] = daily_counts.index.year
+
+#Retrieve and sort the years
+years = sorted(daily_counts["year"].unique())
+
+#Create subplots per year
+fig, axes = plt.subplots(len(years), 1, figsize = (10, 10), sharex = False)
+
+#Add a shared y-label for better visualization
+fig.text(0.01, 0.5,"TFF (%)", va = "center", rotation = "vertical", fontsize = 13)
+
+#Iterate over the years and extract the daily data
+for i, year in enumerate(years):
+    ax = axes[i]
+    year_data = daily_counts[daily_counts["year"] == year]
+
+    #Show the plot of the line graph with dots to show the data points
+    ax.plot(year_data.index, year_data["TFF (%)"], marker = "o", markersize = 3)
+    ax.set_title(f"Daily TFF Performance - {year}")
+    ax.set_ylim(0, 110)
+    ax.grid(True)
+    ax.xaxis.set_major_locator(mdates.MonthLocator())
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b"))
+
+    #Label on the x-axis only on the last subplot for better visualization
+    if i == len(axes) -1:
+        ax.set_xlabel("Month", fontsize = 13)
+    else:
+        ax.tick_params(labelbottom = False)
+
+plt.suptitle("Daily TFF Performance (2021-2024)", fontsize = 16, fontweight = "bold", y = 1)
+plt.tight_layout()
+plt.show()
+
+#Check for shipments that are not labelled "on time"
+zero_days = daily_counts[daily_counts["TFF (%)"] == 0]
+print(zero_days[["ON_TIME", "EARLY", "LATE", "TFF (%)"]])
+
+-----------------------------------------------------
+#GRAPH 4 - Monthly shipment volume and TFF (2021-2024)
+-----------------------------------------------------
+
+#Loading the data
+df = pd.read_excel("DatasetTFF.xlsx")
+
+#Extract the month and year from the transport deadline date
+df["year"] = df["tff_transportDeadlineDateTime"].dt.year
+df["month"] = df["tff_transportDeadlineDateTime"].dt.month
+
+#Filter for specific years (2021 - 2024)
+df = df[df["year"].between(2021,2024)]
+
+#Calculate the total shipments (volume) per month
+monthly_volume = df.groupby(["year", "month"])["totalShipments"].sum()
+
+#Count TFF labels based on the total shipments
+monthly_tff_labels = df.groupby(["year", "month", "tff_label"])["totalShipments"].sum().unstack(fill_value = 0)
+
+#Caculate the monthly TFF percentages
+monthly_tff_labels["TFF (%)"] = (monthly_tff_labels["ON_TIME"] / monthly_tff_labels.sum(axis = 1)) * 100
+
+#Reset index and combine the two variables
+combined_df = monthly_volume.reset_index().merge(monthly_tff_labels["TFF (%)"].reset_index(), on = ["year", "month"])
+
+#Datetime index for labeling
+combined_df["date"] = pd.to_datetime(dict(year = combined_df["year"], month = combined_df["month"], day = 1))
+
+#Sort by date
+combined_df = combined_df.sort_values("date")
+
+#Plotting
+fig, ax1 = plt.subplots(figsize = (8,5))
+
+#Show the bar plot with shipment volumes
+bars = ax1.bar(combined_df["date"], combined_df["totalShipments"], width = 20)
+ax1.set_title("Monthly Shipment Volume and TFF (2021-2024)", fontsize = 16, fontweight = "bold")
+ax1.set_xlabel("Month", fontsize = 13)
+ax1.set_ylabel("Shipment Volume", fontsize = 13)
+ax1.set_xticks(combined_df["date"])
+ax1.set_xticklabels(combined_df["date"].dt.strftime("%b-%Y"), rotation = 45, ha = "right")
+ax1.tick_params(axis = "y", labelsize = 11)
+ax1.ticklabel_format(style="plain", axis="y")
+ax1.grid(axis = "y", linestyle = "--")
+
+#Show the line graph with the TFF percentages
+ax2 = ax1.twinx()
+line = ax2.plot(combined_df["date"], combined_df["TFF (%)"], color = "green", marker = "o", label = "TFF (%)")
+ax2.set_ylabel("TFF (%)", fontsize = 13, color = "green")
+ax2.tick_params(axis = "y", labelsize = 11, labelcolor = "green")
+ax2.set_ylim(0,110)
+
+#Combined legend
+lines_labels = [bars, line[0]]
+labels = ["Shipment Volume", "TFF (%)"]
+ax1.legend(lines_labels, labels, loc = "upper right")
+
+plt.tight_layout()
+plt.show()
+
+-----------------------------------------------------
+#GRAPH 5 - Monthly number of retailers 
+-----------------------------------------------------
+#Loading the data
+df = pd.read_excel("vvb retailers.xlsx", sheet_name= "output")
+
+#Ensure that there are no duplicates, retailer ID's are unique
+df_unique_retailer = df.groupby("retailerId").max()
+
+#Sum the TRUE values per month to retrieve the count of active retailers
+count = df_unique_retailer.sum()
+
+#Coverting to a datetime format
+count.index = pd.to_datetime(count.index, format = "%b-%Y")
+
+#Filter for specific years (2021 - 2024)
+count = count[(count.index.year >= 2021) & (count.index.year <= 2024)]
+
+#The labels for the x-axis will have the format of the month name with corresponding year
+labels = count.index.strftime("%b-%Y")
+
+#Showing the bar plot
+plt.figure(figsize = (10,6))
+plt.bar(labels, count.values)
+plt.title("Monthly Number of Retailers (2021-2024)", fontsize = 16, fontweight = "bold")
+plt.xlabel("Date", fontsize = 13)
+plt.ylabel("Number of Retailers", fontsize = 13)
+plt.xticks(fontsize = 11, rotation = 45)
+plt.yticks(fontsize = 11)
+plt.grid(axis = "y", linestyle = "--")
+
+plt.tight_layout()
+plt.show()
+
+#To show the number of retailers per month in a table
+print(count)
+
+-----------------------------------------------------
+#GRAPH 6 - Weekly shipment volume and TFF 
+-----------------------------------------------------
+
+#Loading the data
+df = pd.read_excel("DatasetTFF.xlsx")
+
+#Extract the name of the weekdays
+df["weekday"] = df["tff_transportDeadlineDateTime"].dt.day_name()
+
+#Reorder the weekdays
+weekday_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+df["weekday"] = pd.Categorical(df["weekday"], categories = weekday_order, ordered = True)
+
+#Count TFF labels per weekday based on the total shipments
+weekday_tff_labels = df.groupby(["tff_transportDeadlineDateTime", "weekday", "tff_label"], observed = True)["totalShipments"].sum().unstack(fill_value=0)
+
+#Caculate the TFF percentages per weekday
+weekday_tff_labels["TFF (%)"] = (weekday_tff_labels["ON_TIME"] / weekday_tff_labels.sum(axis=1)) * 100
+weekday_tff_labels = weekday_tff_labels.reset_index()
+
+#Calculate the total daily shipment volume
+weekday_tff_labels["totalShipments"] = weekday_tff_labels[["EARLY", "ON_TIME", "LATE"]].sum(axis = 1)
+
+#Calculate the average shipment volume and TFF by weekday
+weekday_avg = weekday_tff_labels.groupby("weekday", observed = True)[["totalShipments", "TFF (%)"]].mean()
+
+#Show the plots
+fig, ax1 = plt.subplots(figsize=(10, 6))
+
+#Show the bar plot with volumes
+bars = ax1.bar(weekday_avg.index, weekday_avg["totalShipments"], label = "Shipment Volume")
+ax1.set_ylabel("Average Shipment Volume", fontsize = 13)
+ax1.tick_params(axis='y', labelsize = 11)
+ax1.set_xlabel("Weekday", fontsize = 13)
+ax1.grid(axis='y', linestyle = "--")
+ax1.ticklabel_format(style="plain", axis="y")
+
+#Show the line plot with TFF percentages
+ax2 = ax1.twinx()
+line, = ax2.plot(weekday_avg.index, weekday_avg["TFF (%)"], color = "green", marker = "o", label = "TFF (%)")
+ax2.set_ylabel("Average TFF (%)", color = "green", fontsize = 13)
+ax2.tick_params(axis='y', labelcolor = "green", labelsize = 11)
+ax2.set_ylim(0, 110)
+
+ax1.set_title("Weekly Shipment Volume and TFF", fontsize = 16, fontweight = "bold")
+
+#Combine legends
+ax1.legend([bars, line], ["Shipment Volume", "TFF (%)"], loc = "upper right")
+
+fig.tight_layout()
+plt.show()
+
+#Retrieve the values
+summary = weekday_avg.rename (columns = {"totalShipments": "Average Shipment Volume", "TFF (%)": "Average TFF (%)"})
+print(summary)
+
+    
+-----------------------------------------------------
+#GRAPH 6 - TFF perfomrance around peak periods
+-----------------------------------------------------
+#Barplot of the TFF percentages for each peak period per year
+#The dates can be adjusted for different periods within each year
+
+#Loading the data
+df = pd.read_excel("DatasetTFF.xlsx")
+
+#The dates of a particular peak period
+start_date = pd.to_datetime("2024-03-25")
+end_date = pd.to_datetime("2024-03-31")
+
+#1 week before and after the peak period
+plot_start = start_date - pd.Timedelta(days = 7)
+plot_end = end_date + pd.Timedelta(days = 7)
+
+#Filter the dataset to include the 3-week window only
+df_plot = df[(df["tff_transportDeadlineDateTime"] >= plot_start) & (df["tff_transportDeadlineDateTime"] <= plot_end)]
+
+#Count TFF labels based on the total shipments per day
+daily_tff = df_plot.groupby(["tff_transportDeadlineDateTime", "tff_label"])["totalShipments"].sum().unstack(fill_value=0)
+
+#Calculate the daily TFF percentages
+daily_tff["TFF (%)"] = (daily_tff["ON_TIME"] / daily_tff.sum(axis = 1)) * 100
+
+#Including all dates
+weeks = pd.date_range(start = plot_start, end = plot_end)
+
+#Reindex to make sure that all days are present, fill gaps with the value 0
+daily_tff = daily_tff["TFF (%)"].reindex(weeks, fill_value = 0)
+
+#Calculate the daily shipment volume
+daily_volume = df_plot.groupby("tff_transportDeadlineDateTime")["totalShipments"].sum().reindex(weeks, fill_value = 0)
+
+#Plotting of the bar plot with total shipments
+fig, ax1 = plt.subplots(figsize = (8,5))
+plt.title(f"TFF Performance Around Peak Period - {start_date.strftime("%Y-%m-%d")} to {end_date.strftime("%Y-%m-%d")}",fontsize = 16, fontweight = "bold")
+
+bars = ax1.bar(daily_volume.index, daily_volume.values, label = "Shipment Volume")
+ax1.set_ylabel("Shipment Volume", fontsize = 13)
+ax1.set_xlabel("Date", fontsize = 13)
+ax1.set_xticks(daily_volume.index)
+ax1.set_xticklabels(daily_volume.index.strftime("%d-%b"), rotation = 45, fontsize = 11)
+ax1.tick_params(axis = "y", labelsize = 11)
+ax1.grid(axis = "y", linestyle = "--")
+
+#Highlight the peak period in pink
+ax1.axvspan(mdates.date2num(start_date), mdates.date2num(end_date), color = "pink", zorder = 0, alpha = 0.5)
+
+#Plotting of the line graph with TFF percentages
+ax2 = ax1.twinx()
+line, = ax2.plot(daily_tff.index, daily_tff.values, color = "green", label = "TFF (%)", marker = "o", markersize = 4)
+ax2.set_ylabel("TFF (%)", color = "green", fontsize = 13)
+ax2.tick_params(axis = "y", labelcolor = "green", labelsize = 11)
+ax2.set_ylim(0,110)
+
+ax1.legend([bars, line], ["Shipment Volume", "TFF (%)"], loc = "upper right")
+
+plt.tight_layout()
+plt.show()
+
+
+
+
+
+
+
+
+    
+
+
+#DATA ANALYSIS
+
+    
 -----------------------------------------------------
 #STEP 1 - LOAD & PREPARE BASE DATASET
 -----------------------------------------------------
