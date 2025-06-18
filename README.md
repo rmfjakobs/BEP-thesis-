@@ -54,7 +54,7 @@ def is_peak_period(date):
 #Apply to volume dataframe
 df_volume["is_peak"] = df_volume["date"].apply(is_peak_period).astype(int)
 
-#Temperature
+#Temperature data
 month_numbers = {"Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4, "May": 5, "Jun": 6, "Jul": 7, "Aug": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12}
 
 df_temp = pd.read_excel("Temperature.xlsx")
@@ -63,7 +63,7 @@ df_temp["month"] = df_temp["month_name"].map(month_numbers)
 df_temp = df_temp.drop(columns = ["month_name"])
 df_temp = df_temp.rename(columns = {"Year": "year"})
 
-#Retailers
+#Retailer data
 df_retailers = pd.read_excel("Retailers.xlsx") #Add number of active retailers (vvb partners) - same format as the temperature excel file
 df_retailers = df_retailers.melt(id_vars = ["Year"], var_name = "month_name", value_name = "vvb_partner_count") #Reshape the format
 df_retailers["month"] = df_retailers["month_name"].map(month_numbers)
@@ -74,8 +74,8 @@ df_retailers = df_retailers.rename(columns = {"Year": "year"})
 df_volume["year"] = pd.to_datetime(df_volume["date"]).dt.year
 df_volume["month"] = pd.to_datetime(df_volume["date"]).dt.month
 df_volume["month_name"] = pd.to_datetime(df_volume["date"]).dt.month_name()
-df_volume = df_volume.merge(df_temp, on = ["year", "month"], how = "left") #Merge with temperature data
-df_volume = df_volume.merge(df_retailers, on = ["year", "month"], how = "left") #Merge with vvb partners data
+df_volume = df_volume.merge(df_temp, on = ["year", "month"], how = "left") 
+df_volume = df_volume.merge(df_retailers, on = ["year", "month"], how = "left")
 
 #Add warehouse volumes (BFC1 & BFC2)
 df_bfc = pd.read_excel("BFC1&2.xlsx")
@@ -83,7 +83,7 @@ df_bfc["date"] = pd.to_datetime(df_bfc["tff_deliveryDate"]).dt.date
 df_bfc = df_bfc[df_bfc["warehouse"].isin(["BFC1", "BFC2"])]
 df_bfc_volume = df_bfc.groupby("date")["orders"].sum().reset_index()
 df_bfc_volume = df_bfc_volume.rename(columns = {"orders": "bfc_volume"})
-df_volume = df_volume.merge(df_bfc_volume, on = "date", how =  "left") #Merge with bfc data
+df_volume = df_volume.merge(df_bfc_volume, on = "date", how =  "left")
 
 --------------------------------------------------------
 #STEP 3 - CALCULATE THE TFF AND MERGE
@@ -116,6 +116,7 @@ df_model["volume_x_presplit"] = df_model["totalShipments"] * df_model["presplit_
 #One-hot encoding weekday and month
 df_model = pd.get_dummies(df_model, columns = ["weekday_name", "month_name"], drop_first = True)
 
+#Heatmap to visualize correlations between the variables (no time-dependent or binary indicators) 
 plt.figure(figsize = (8,5))
 sns.heatmap(df_model[["TFF (%)", "totalShipments", "temperature", "vvb_partner_count", "bfc_volume"]].corr(), annot = True, cmap = "coolwarm_r", vmin = -1, vmax = 1, center = 0)
 plt.title("Correlation Matrix", fontweight = "bold")
@@ -197,18 +198,17 @@ print("MAPE_NF_Day_train:", mape_train)
 #Extract ISO year, ISO week, and weekday number
 daily_tff["iso_year"] = daily_tff["date"].dt.isocalendar().year
 daily_tff["iso_week"] = daily_tff["date"].dt.isocalendar().week
-daily_tff["weekday"] = daily_tff["date"].dt.weekday  #0 = Monday
+daily_tff["weekday"] = daily_tff["date"].dt.weekday  #0 = Monday, 1 = Tuesday etc. 
 
 #shift the current dates forward by 1 day to forecast t + 1
 daily_tff["forecast_date"] = daily_tff["date"] + pd.Timedelta(days = 1)
 daily_tff["forecast_iso_year"] = daily_tff["forecast_date"].dt.isocalendar().year
 daily_tff["forecast_iso_week"] = daily_tff["forecast_date"].dt.isocalendar().week
-daily_tff["forecast_weekday"] = daily_tff["forecast_date"].dt.weekday  #0 = Monda
+daily_tff["forecast_weekday"] = daily_tff["forecast_date"].dt.weekday 
 
 #Create dataframe for last week's same weekday
 ref_7day = daily_tff[["iso_week", "iso_year", "weekday", "TFF (%)"]].copy()
-ref_7day["iso_week"] -= 1
-#ref_7day = ref_7day[ref_7day["iso_week"] > 0]
+ref_7day["iso_week"] -= 1 #shift data one week back to take the TFF from the same weekday last week 
 ref_7day = ref_7day.rename(columns = {"TFF (%)": "TFF_7day_cyclic"})
 
 cyclic_7day_df = pd.merge(daily_tff, ref_7day, left_on = ["forecast_iso_week", "forecast_iso_year", "forecast_weekday"], right_on = ["iso_week", "iso_year", "weekday"], how = "left").dropna(subset = ["TFF (%)", "TFF_7day_cyclic"])
@@ -238,19 +238,15 @@ print("MAE_7day_cyclic_train:", mae_seasonal_train)
 print("RMSE_7day_cyclic_train:", rmse_seasonal_train)
 print("MAPE_7day_cyclic_train:", mape_seasonal_train)
 
-
-
-
-
-
 -------------------------------------------------------------------------
 #STEP 8 - WEEEKDAY CYCLIC NAïVE FORECAST (SAME WEEKDAY & WEEK LAST YEAR) 
 -------------------------------------------------------------------------
+    
 #Create a reference dataframe with previous year's TFF
 seasonal_ref = daily_tff[["iso_week", "iso_year", "weekday", "TFF (%)"]].copy()
 
 #Shift year forward to match with current year's dates
-seasonal_ref["iso_year"] += 1
+seasonal_ref["iso_year"] += 1 #take the TFF from same week and same weekday lasta year 
 seasonal_ref = seasonal_ref.rename(columns = {"TFF (%)": "TFF_seasonal"})
 
 #Merge to get forecast from same weekday and same week of the previous year
@@ -280,7 +276,6 @@ print("MAPE_Seasonal_Naive:", mape_seasonal)
 print("MAE_Seasonal_Naive_train:", mae_seasonal_train)
 print("RMSE_Seasonal_Naive_train:", rmse_seasonal_train)
 print("MAPE_Seasonal_Naive_train:", mape_seasonal_train)
-
 
 ---------------------------------------------------------------------------
 #STEP 9 - YEARLY CYCLIC NAïVE FORECAST (SAME ISO WEEK AVERAGE OF LAST YEAR) 
@@ -364,16 +359,18 @@ from datetime import timedelta
 
 daily_tff["weekday"] = pd.to_datetime(daily_tff["date"]).dt.day_name()
 
-#Set up a dictionary for easy lookup
+# Set up a dictionary for easy lookup
 tff_dict = daily_tff.set_index("date")["TFF (%)"].to_dict()
 
-#Initialize forecast list
+# Initialize forecast list
 wma_forecast = []
+forecast_dates = []
 
 #Prioritize same weekday in lookback
 for i in range(14, len(daily_tff)):
     current_date = daily_tff.loc[i, "date"]
-    current_weekday = pd.to_datetime(current_date).weekday()  # 0 = Monday etc.
+    forecast_date = current_date + timedelta(days = 1)
+    current_weekday = pd.to_datetime(forecast_date).weekday()  # 0 = Monday etc.
 
     lookback_days = 14
     values = []
@@ -386,7 +383,7 @@ for i in range(14, len(daily_tff)):
             values.append(tff_val)
             # Give higher weight if it's the same weekday
             past_weekday = pd.to_datetime(past_date).weekday()
-            weight = 12 if past_weekday == current_weekday else 1
+            weight = 13 if past_weekday == current_weekday else 1
             weights.append(weight)
 
     if values:
@@ -395,20 +392,22 @@ for i in range(14, len(daily_tff)):
         forecast = np.nan
 
     wma_forecast.append(forecast)
+    forecast_dates.append(forecast_date)
 
-#Fill the first 14 days with NaN
-wma_forecast = [np.nan] * 14 + wma_forecast
-daily_tff["TFF_WMA_forecast"] = wma_forecast
+#Create dataframe for forecasted values
+wma_df = pd.DataFrame({"forecast_date": forecast_dates, "TFF_WMA_forecast": wma_forecast})
+
+#Merge forecast with true values
+daily_tff_full = pd.merge(daily_tff, wma_df, left_on = "date", right_on = "forecast_date", how = "left")
 
 #Drop rows with NA values
-wma_df = daily_tff.dropna(subset = ["TFF (%)", "TFF_WMA_forecast"])
+wma_df_final = daily_tff_full.dropna(subset = ["TFF (%)", "TFF_WMA_forecast"])
 
 #Split the dataset into a training and test set (80/20)
-split_index = int(len(wma_df) * 0.8)
-train = wma_df.iloc[:split_index]
-test = wma_df.iloc[split_index:]
+split_index = int(len(wma_df_final) * 0.8)
+train = wma_df_final.iloc[:split_index]
+test = wma_df_final.iloc[split_index:]
 
-#Calculate performance metrics
 rmse_wma = np.sqrt(mean_squared_error(test["TFF (%)"], test["TFF_WMA_forecast"]))
 mae_wma = mean_absolute_error(test["TFF (%)"], test["TFF_WMA_forecast"])
 mape_df = test[test["TFF (%)"] != 0]
@@ -419,7 +418,6 @@ mae_wma_train = mean_absolute_error(train["TFF (%)"], train["TFF_WMA_forecast"])
 mape_df = train[train["TFF (%)"] != 0]
 mape_wma_train = np.mean(np.abs((mape_df["TFF (%)"] - mape_df["TFF_WMA_forecast"]) / mape_df["TFF (%)"])) * 100
 
-#Print results
 print("MAE_WMA:", mae_wma)
 print("RMSE_WMA:", rmse_wma)
 print("MAPE_WMA:", mape_wma)
