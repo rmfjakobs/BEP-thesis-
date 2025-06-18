@@ -4,10 +4,10 @@
 -----------------------------------------------------
 #STEP 1 - LOAD & PREPARE BASE DATASET
 -----------------------------------------------------
- import pandas as pd
- from datetime import datetime
- import seaborn as sns
- import matplotlib.pyplot as plt
+import pandas as pd
+from datetime import datetime
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 #Loading the data
 df_bol = pd.read_excel("DatasetTFF.xlsx")
